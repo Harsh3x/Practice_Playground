@@ -6,25 +6,25 @@ require.config({
 
 require(["vs/editor/editor.main"], function () {
 
+  // --- 1. EDITOR CONFIGURATION ---
   const editor = monaco.editor.create(
     document.getElementById("editor"),
     {
       value: "",
       language: "python",
       theme: "vs-dark",
-      fontSize: 25, // Slightly larger for better readability
+      fontSize: 17, 
       lineHeight: 26,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      padding: { top: 20, bottom: 20 }, // More breathing room
+      padding: { top: 20, bottom: 20 },
       automaticLayout: true,
       autoClosingBrackets: "never",
       autoClosingQuotes: "never",
       autoSurround: "never",
-      // Use a clean monospace font stack
       fontFamily: "'Roboto Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
       fontLigatures: true,
-      cursorBlinking: "phase", // Smoother cursor blinking
+      cursorBlinking: "phase", 
       cursorSmoothCaretAnimation: "on",
       smoothScrolling: true
     }
@@ -33,13 +33,15 @@ require(["vs/editor/editor.main"], function () {
   const model = editor.getModel();
   const tabSize = editor.getOption(monaco.editor.EditorOption.tabSize) || 4;
 
-  // --- QUESTION STREAMING LOGIC ---
+  // --- 2. QUESTION STREAMING LOGIC ---
   const QUESTION_TEXT = "Implement a Neural Network in python from scratch.";
   
   function streamQuestion() {
       const display = document.getElementById("question-display");
+      if (!display) return;
+      
       let i = 0;
-      const speed = 30; // Slightly slower for a more deliberate data stream feel
+      const speed = 30; 
 
       function type() {
           if (i < QUESTION_TEXT.length) {
@@ -59,13 +61,18 @@ require(["vs/editor/editor.main"], function () {
               setTimeout(type, speed);
           }
       }
-      // Small delay before starting the stream for dramatic effect
       setTimeout(type, 500);
   }
 
   streamQuestion();
-  // -------------------------------
 
+  // --- 3. CACHE STORE ---
+  let activeCache = {
+      originCode: null,   
+      fullGhostText: null 
+  };
+
+  // --- 4. INLINE GHOST CLASS ---
   class InlineGhost {
     constructor(editor) {
       this.editor = editor;
@@ -122,15 +129,6 @@ require(["vs/editor/editor.main"], function () {
       }]);
     }
 
-    append(newText) {
-       if (!newText) return;
-       const newLines = newText.replace(/\r/g, "").split("\n");
-       this.lines = this.lines.concat(newLines);
-       this.ensureLinesExist(this.lines.length);
-       newLines.forEach(() => this.nodes.push(this.createNode()));
-       this.updatePosition();
-    }
-
     show(text) {
       this.hide(false);
       this.lines = text.replace(/\r/g, "").split("\n");
@@ -169,13 +167,33 @@ require(["vs/editor/editor.main"], function () {
 
       if (textToInsert) {
         this.editor.trigger('keyboard', 'type', { text: textToInsert });
+        // Clear cache on accept
+        activeCache = { originCode: null, fullGhostText: null };
       }
       this.hide();
     }
 
+    // --- SYNTAX HIGHLIGHTER ---
+    highlightPython(code) {
+        const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        let html = esc(code);
+
+        html = html.replace(/("[^"]*"|'[^']*')/g, '<span class="ghost-string">$1</span>');
+
+        const keywords = ["def", "class", "return", "import", "from", "if", "else", "elif", "for", "while", "try", "except", "with", "as", "pass", "lambda", "is", "in", "not", "and", "or", "None", "True", "False"];
+        keywords.forEach(kw => {
+            const regex = new RegExp(`\\b${kw}\\b(?![^<]*>)`, 'g');
+            html = html.replace(regex, `<span class="ghost-keyword">${kw}</span>`);
+        });
+
+        html = html.replace(/(\w+)(?=\()/g, '<span class="ghost-function">$1</span>');
+        html = html.replace(/\b(\d+)\b(?![^<]*>) /g, '<span class="ghost-number">$1</span>');
+
+        return html;
+    }
+
     updatePosition() {
       if (!this.anchorPosition) return;
-
       const cursorPosition = this.editor.getPosition();
       const cursorCoords = this.editor.getScrolledVisiblePosition(cursorPosition);
       const startOfLine = this.editor.getScrolledVisiblePosition({
@@ -192,55 +210,34 @@ require(["vs/editor/editor.main"], function () {
         }
 
         const fullLineText = this.lines[i] ?? "";
-        const codeOnly = this.stripComment(fullLineText);
-        const isFullComment = fullLineText.trim().startsWith('#');
-        
-        if (i === this.lineIndex) {
-            if (this.colConsumed >= codeOnly.length && !this.isMismatch && !isFullComment) {
-                 node.textContent = ""; 
-                 return;
-            }
-        }
-
         const visibleText = i === this.lineIndex ? fullLineText.slice(this.colConsumed) : fullLineText;
+        const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-        // --- UPDATED COLORS FOR DARK MODE (MORE VIBRANT) ---
+        // --- RENDERING ---
         if (this.isMismatch) {
-            node.style.color = "#ff3333"; // Neon Red
+            node.style.color = "#ff3333"; 
             node.style.textDecoration = "line-through";
             node.style.opacity = "0.9";
-             // Subtle red glow
-             node.style.textShadow = "0 0 5px rgba(255, 51, 51, 0.5)";
             node.textContent = visibleText;
         } else {
             node.style.textDecoration = "none";
             node.style.opacity = "1.0";
-             // Reset glow for normal text
-             node.style.textShadow = "none";
-            const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-            if (isFullComment) {
-                node.style.color = "#4ec9b0"; // VScode style green/teal
-                node.textContent = visibleText;
-            } else {
-                const commentStartIndex = codeOnly.length;
-                const relativeSplitIndex = commentStartIndex - (i === this.lineIndex ? this.colConsumed : 0);
-
-                if (relativeSplitIndex >= visibleText.length) {
-                     node.style.color = "#4ec9b0";
-                    node.textContent = visibleText;
-                } else if (relativeSplitIndex <= 0) {
-                    // Suggested Code Color: Luminous Orange
-                    node.style.color = "#ff9e45"; 
-                    // Add back the glow for suggested code
-                    node.style.textShadow = "0 0 8px rgba(255, 158, 69, 0.6)";
-                    node.textContent = visibleText;
-                } else {
-                    const partCode = visibleText.slice(0, relativeSplitIndex);
-                    const partComment = visibleText.slice(relativeSplitIndex);
-                    // Code: Glowing Orange, Comment: Teal
-                    node.innerHTML = `<span style="color: #ff9e45; text-shadow: 0 0 8px rgba(255, 158, 69, 0.6);">${esc(partCode)}</span><span style="color: #4ec9b0">${esc(partComment)}</span>`;
-                }
+            
+            if (visibleText.includes("# [INSTRUCTION]")) {
+                const parts = visibleText.split("# [INSTRUCTION]");
+                const codePart = parts[0];
+                const instructionPart = "# [INSTRUCTION]" + parts.slice(1).join("# [INSTRUCTION]");
+                
+                node.innerHTML = this.highlightPython(codePart) + `<span class="ghost-instruction">${esc(instructionPart)}</span>`;
+            } 
+            else if (visibleText.includes("#")) {
+                const commentIndex = visibleText.indexOf("#");
+                const codePart = visibleText.substring(0, commentIndex);
+                const commentPart = visibleText.substring(commentIndex);
+                node.innerHTML = this.highlightPython(codePart) + `<span class="ghost-comment">${esc(commentPart)}</span>`;
+            } 
+            else {
+                node.innerHTML = this.highlightPython(visibleText);
             }
         }
 
@@ -294,6 +291,8 @@ require(["vs/editor/editor.main"], function () {
   const ghost = new InlineGhost(editor);
   window.ghostEnabled = false;
 
+  // --- 5. HELPER FUNCTIONS ---
+
   function sliceCodeUpToCursor(text, cursor) {
     const lines = text.split('\n');
     const limitLineIndex = cursor.lineNumber - 1; 
@@ -309,68 +308,161 @@ require(["vs/editor/editor.main"], function () {
     return preLines.join('\n');
   }
 
+  function removeOverlap(inputCode, ghostText) {
+      if (!ghostText) return "";
+      const inputLines = inputCode.split('\n');
+      const lastInputLine = inputLines[inputLines.length - 1]; 
+      
+      if (lastInputLine.length > 0 && ghostText.startsWith(lastInputLine)) {
+          return ghostText.slice(lastInputLine.length);
+      }
+      
+      const lastTrimmed = lastInputLine.trim();
+      if (lastTrimmed.length > 3) {
+          const matchIndex = ghostText.indexOf(lastTrimmed);
+          if (matchIndex >= 0 && matchIndex < lastInputLine.length + 5) {
+               return ghostText.slice(matchIndex + lastTrimmed.length);
+          }
+      }
+      return ghostText;
+  }
+
   async function fetchGhostText(currentCode, currentCursor, mode) {
      const problem = document.getElementById("question-display").innerText; 
-     
      const codeContext = sliceCodeUpToCursor(currentCode, currentCursor);
+
+     let augmentedProblem = problem;
+     const INSTRUCTION_PROMPT = 
+        "\n[SYSTEM]: Generate the next logical chunk of python code. " +
+        "CRITICAL: End your response with a python comment on a new line " +
+        "starting with '# [INSTRUCTION]: ' that explains exactly what step the user should implement next.";
+
+     augmentedProblem += INSTRUCTION_PROMPT;
 
      try {
         const res = await fetch("http://localhost:3000/suggest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            problem,
+            problem: augmentedProblem, 
             language: "python",
             code: codeContext,
-            mode: mode
+            mode: mode 
           })
         });
         const data = await res.json();
         let rawGhost = data.ghost || "";
 
-        if (!rawGhost.trim()) return null;
+        if (!rawGhost) return null;
 
-        const contextLines = codeContext.split('\n');
-        const lastInputLine = contextLines[contextLines.length - 1].trim();
-
-        if (lastInputLine.length > 3 && rawGhost.trim().startsWith(lastInputLine)) {
-            const cutIndex = rawGhost.indexOf(lastInputLine) + lastInputLine.length;
-            rawGhost = rawGhost.slice(cutIndex).trimStart();
-        }
-
-        return rawGhost ? rawGhost : null;
+        const cleanGhost = removeOverlap(codeContext, rawGhost);
+        return cleanGhost ? cleanGhost : null;
      } catch (e) {
         return null;
      }
   }
 
-  async function toggleGhost(mode = 'chunk') {
+  // --- 6. CORE ACTIONS ---
+
+  // --- ROBUST CACHE TOGGLE LOGIC ---
+  async function toggleGhost() {
+    // 1. Toggle OFF
     if (window.ghostEnabled) {
       ghost.hide(true);
       window.ghostEnabled = false;
       return;
     }
-    const text = await fetchGhostText(editor.getValue(), editor.getPosition(), mode);
+
+    // 2. Context Setup
+    const currentPos = editor.getPosition();
+    const fullCurrentCode = editor.getValue();
+    const codeContext = sliceCodeUpToCursor(fullCurrentCode, currentPos);
+
+    // 3. Cache Check
+    if (activeCache.originCode && activeCache.fullGhostText) {
+         // Normalize strings to ignore minor line-ending differences
+         const cleanContext = codeContext.replace(/\r\n/g, "\n");
+         const cleanOrigin = activeCache.originCode.replace(/\r\n/g, "\n");
+
+         // Does the current code start with the original cached code?
+         if (cleanContext.startsWith(cleanOrigin)) {
+             // Calculate user progress
+             const userProgress = cleanContext.slice(cleanOrigin.length);
+             const cleanGhost = activeCache.fullGhostText.replace(/\r\n/g, "\n");
+
+             // Does the ghost text match what the user typed?
+             if (cleanGhost.startsWith(userProgress)) {
+                 const remainingGhost = activeCache.fullGhostText.slice(userProgress.length);
+                 
+                 if (remainingGhost.trim().length > 0) {
+                     console.log("⚡ Cache Hit: Instant Show");
+                     ghost.show(remainingGhost);
+                     window.ghostEnabled = true;
+                     return; // EXIT: Do NOT fetch from API
+                 }
+             }
+         }
+    }
+
+    // 4. Cache Miss - Fetch
+    activeCache = { originCode: null, fullGhostText: null }; 
+
+    const text = await fetchGhostText(editor.getValue(), editor.getPosition(), 'chunk');
+    
     if (text) {
+       // Save Origin Code EXACTLY as it is now
+       activeCache = { originCode: codeContext, fullGhostText: text };
        ghost.show(text);
        window.ghostEnabled = true;
     }
   }
 
-  async function extendGhost() {
-     if (!window.ghostEnabled || !ghost.lines.length) return;
-     const combinedCode = editor.getValue() + "\n" + ghost.lines.join("\n");
-     const lines = combinedCode.split("\n");
-     const projectedCursor = { lineNumber: lines.length, column: lines[lines.length - 1].length + 1 };
-     
-     const nextPart = await fetchGhostText(combinedCode, projectedCursor, 'chunk');
-     if (nextPart) ghost.append("\n" + nextPart);
+  // --- STEP-BY-STEP GENERATION ---
+  async function triggerNextStep() {
+    const currentGhostLines = window.ghostEnabled ? [...ghost.lines] : [];
+    
+    let combinedCode = editor.getValue();
+    if (currentGhostLines.length > 0) {
+        combinedCode += "\n" + currentGhostLines.join("\n");
+    }
+
+    const lines = combinedCode.split("\n");
+    const projectedCursor = { 
+        lineNumber: lines.length, 
+        column: lines[lines.length - 1].length + 1 
+    };
+
+    const newStepText = await fetchGhostText(combinedCode, projectedCursor, 'step');
+    
+    if (newStepText) {
+        let finalGhostText = "";
+        
+        if (currentGhostLines.length > 0) {
+            finalGhostText = currentGhostLines.join("\n") + "\n" + newStepText;
+        } else {
+            finalGhostText = newStepText;
+        }
+
+        // --- UPDATE CACHE ON NEXT STEP ---
+        // Crucial: Update the 'fullGhostText' so future toggles use the Extended version
+        // We keep 'originCode' as the current editor state (committed code)
+        const currentPos = editor.getPosition();
+        const currentContext = sliceCodeUpToCursor(editor.getValue(), currentPos);
+
+        activeCache = {
+            originCode: currentContext, 
+            fullGhostText: finalGhostText
+        };
+
+        ghost.show(finalGhostText);
+        window.ghostEnabled = true;
+    }
   }
 
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => toggleGhost('chunk'));
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Space, () => toggleGhost('full'));
+  // --- 7. KEYBINDINGS ---
 
-  editor.addCommand(monaco.KeyCode.F8, extendGhost);
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => toggleGhost());
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.DownArrow, triggerNextStep);
 
   editor.addCommand(monaco.KeyCode.Tab, function () {
     if (window.ghostEnabled && ghost.anchorPosition) {

@@ -4,11 +4,11 @@
   --orange-glow: 0 0 15px rgba(255, 94, 0, 0.4);
   
   /* Theme Palette */
-  --bg-main: #f0f2f5;     /* Slightly cleaner light gray */
-  --bg-panel: #ffffff;    /* Pure white panels */
-  --bg-editor-dark: #1e1e1e; /* Standard dark editor */
+  --bg-main: #f0f2f5;     
+  --bg-panel: #ffffff;    
+  --bg-editor-dark: #1e1e1e; 
 
-  --text-dark: #1a202c;   /* Deep charcoal for main text */
+  --text-dark: #1a202c;   
   --text-muted: #718096;  
   
   /* Futuristic Borders & Shadows */
@@ -24,13 +24,14 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--bg-main);
-  /* Subtle futuristic grid pattern background */
-  background-image: 
-    radial-gradient(circle at 1px 1px, rgba(0,0,0,0.05) 1px, transparent 0);
-  background-size: 30px 30px;
+  background-image: url('image_bceb39.jpg'); /* Your binary background */
+  background-size: cover;       
+  background-position: center;  
+  background-attachment: fixed; 
+  background-repeat: no-repeat;
   
   color: var(--text-dark);
-  font-family: 'Inter', system-ui, sans-serif; /* Cleaner, modern sans-serif */
+  font-family: 'Inter', system-ui, sans-serif; 
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -67,7 +68,6 @@ header h1 {
   color: var(--orange);
   font-family: "Bungee", cursive;
   font-style: normal;
-  /* Subtle neon glow on the header text */
   text-shadow: var(--orange-glow);
   letter-spacing: 1px;
 }
@@ -79,6 +79,7 @@ header p {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 2px;
+  text-shadow: 0 1px 0 #ffffff; 
 }
 
 /* Badge Container */
@@ -93,25 +94,22 @@ header p {
   max-height: 50px;
   width: auto;
   display: block;
-  /* Slight glow on the badge itself */
   filter: drop-shadow(0 2px 4px rgba(255, 94, 0, 0.2));
 }
 
 /* --- Futuristic Tech Panels Shared Styles --- */
 .tech-panel {
-  background: var(--bg-panel);
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;
   border: var(--panel-border);
-  /* Deep floating shadow */
   box-shadow: var(--tech-shadow);
-  /* The futuristic orange accent line on top */
   border-top: 3px solid var(--orange);
   position: relative;
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  backdrop-filter: blur(5px); 
 }
 
-/* Subtle hover effect for panels */
 .tech-panel:hover {
   transform: translateY(-2px);
   box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.12), 0 8px 15px -7px rgba(255, 94, 0, 0.1);
@@ -125,13 +123,9 @@ header p {
   min-height: 100px;
   display: flex;
   align-items: center;
-  /* Subtle tech background graphic for the question area */
-  background-image: linear-gradient(135deg, transparent 0%, transparent 95%, rgba(255, 94, 0, 0.03) 95%);
-  background-size: 20px 20px;
 }
 
 #question-display {
-  /* Monospace font for "incoming data stream" look */
   font-family: 'Roboto Mono', monospace;
   font-size: 25px;
   line-height: 1.6;
@@ -143,12 +137,11 @@ header p {
 /* Blinking Cursor Effect */
 .cursor {
   display: inline-block;
-  width: 8px; /* Wider cursor */
+  width: 8px; 
   height: 1.2em;
   background-color: var(--orange);
   margin-left: 4px;
   vertical-align: middle;
-  /* Faster, sharper blinking for tech feel */
   animation: blinker 0.8s step-start infinite;
   box-shadow: var(--orange-glow);
 }
@@ -162,37 +155,30 @@ header p {
   flex: 1;
   margin: 0 24px 24px;
   display: flex;
-  /* Ensure the container background is dark to match the editor */
   background-color: var(--bg-editor-dark);
-  border-radius: 16px; /* Match panel radius */
-  /* Framing the dark editor with a white panel look */
+  border-radius: 16px; 
   border: 4px solid var(--bg-panel); 
-  /* Add an outer orange glow to the frame */
   box-shadow: var(--tech-shadow), 0 0 20px rgba(255, 94, 0, 0.1) inset;
 }
 
 #editor {
   flex: 1;
-  /* Ensure editor corners get clipped by the border radius */
   border-radius: 12px; 
   overflow: hidden;
 }
 
+/* --- GHOST TEXT SYNTAX HIGHLIGHTING --- */
 
-/* -----------------------------
-   Ghost text styling (Dark Mode Context)
------------------------------ */
 .ghost-text {
-  /* Luminous Orange for high contrast */
+  /* Default Ghost Color (Variables/Identifiers) - Luminous Orange */
   color: #ff9e45; 
   opacity: 0.95; 
   font-style: normal;
   white-space: pre;
   pointer-events: none;
   user-select: none;
-  /* Subtle glow for ghost text */
-  text-shadow: 0 0 8px rgba(255, 94, 0, 0.5);
   font-weight: 500;
+  text-shadow: 0 0 8px rgba(255, 158, 69, 0.3); /* Subtle default glow */
 }
 
 .monaco-editor .ghost-after {
@@ -200,4 +186,36 @@ header p {
   font-style: italic;
   pointer-events: none;
   white-space: pre;
+}
+
+/* Syntax Colors for Ghost Text */
+.ghost-keyword {
+  color: #c586c0; /* Purple for keywords (def, class, if, return) */
+  font-weight: bold;
+}
+
+.ghost-function {
+  color: #dcdcaa; /* Yellow-ish for function calls/defs */
+}
+
+.ghost-string {
+  color: #ce9178; /* Orange-red for strings */
+}
+
+.ghost-number {
+  color: #b5cea8; /* Light green for numbers */
+}
+
+.ghost-comment {
+  color: #6a9955; /* Green for standard comments */
+  font-style: italic;
+}
+
+/* --- SPECIAL YELLOW INSTRUCTION --- */
+.ghost-instruction {
+  color: #ffea00; /* Bright Yellow */
+  font-weight: bold;
+  font-style: italic;
+  /* Strong Yellow Glow */
+  text-shadow: 0 0 10px rgba(255, 234, 0, 0.8);
 }

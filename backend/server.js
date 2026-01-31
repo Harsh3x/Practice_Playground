@@ -19,6 +19,11 @@ app.post("/suggest", async (req, res) => {
   try {
     const { problem, code, language, mode } = req.body; 
 
+    // LOG 1: Incoming Request Details
+    console.log(`\n--- 📨 NEW REQUEST [Mode: ${mode}] ---`);
+    console.log(`🔹 Problem: "${problem.substring(0, 50)}..."`);
+    console.log(`🔹 Context Length: ${code ? code.length : 0} chars`);
+
     const isFullCode = mode === "full";
 
     const prompt = `
@@ -46,8 +51,11 @@ ${code || ""}
 COMPLETION (Start immediately after the last character above):
 `;
 
+    // LOG 2: Sending to API
+    console.log("🚀 Sending prompt to Gemini...");
+
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,17 +65,26 @@ COMPLETION (Start immediately after the last character above):
       }
     );
 
-    if (!response.ok) return res.json({ ghost: "" });
+    if (!response.ok) {
+        console.error(`❌ API Error: ${response.status} ${response.statusText}`);
+        return res.json({ ghost: "" });
+    }
 
     const data = await response.json();
     let ghost = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
+    // LOG 3: Raw Response
+    console.log(`✅ Gemini Response received. Length: ${ghost.length} chars`);
+
     // Clean up markdown just in case the model ignores instructions
     ghost = ghost.replace(/^```[a-z]*\n/i, "").replace(/```$/g, "").trimEnd();
 
+    // LOG 4: Final Output
+    console.log(`📤 Sending back ghost text: "${ghost.substring(0, 30).replace(/\n/g, "\\n")}..."`);
+
     res.json({ ghost });
   } catch (err) {
-    console.error("❌ Gemini server error:", err);
+    console.error("❌ SERVER ERROR:", err);
     res.json({ ghost: "" });
   }
 });
