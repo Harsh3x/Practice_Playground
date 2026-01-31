@@ -391,33 +391,33 @@ require(["vs/editor/editor.main"], function () {
 
     // 2. CHECK CACHE FOR RESTORE
     if (activeCache.originCode && activeCache.fullGhostText) {
-         
-         const normalize = (s) => s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-         
-         const cleanContext = normalize(currentContext);
-         const cleanOrigin = normalize(activeCache.originCode);
-         const cleanGhost = normalize(activeCache.fullGhostText);
-         
-         // A. EXACT MATCH (User hid it, typed nothing, wants it back)
-         if (cleanContext === cleanOrigin) {
-             ghost.show(activeCache.fullGhostText);
-             return;
-         }
+          
+          const normalize = (s) => s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          
+          const cleanContext = normalize(currentContext);
+          const cleanOrigin = normalize(activeCache.originCode);
+          const cleanGhost = normalize(activeCache.fullGhostText);
+          
+          // A. EXACT MATCH (User hid it, typed nothing, wants it back)
+          if (cleanContext === cleanOrigin) {
+              ghost.show(activeCache.fullGhostText);
+              return;
+          }
 
-         // B. PROGRESS MATCH (User typed ahead matching the ghost)
-         if (cleanContext.startsWith(cleanOrigin)) {
-             const userProgress = cleanContext.slice(cleanOrigin.length);
-             
-             if (cleanGhost.startsWith(userProgress)) {
-                 const remainingGhost = activeCache.fullGhostText.slice(userProgress.length);
-                 
-                 // Restore it (unless completely consumed)
-                 if (remainingGhost.length > 0) {
-                     ghost.show(remainingGhost);
-                     return;
-                 }
-             }
-         }
+          // B. PROGRESS MATCH (User typed ahead matching the ghost)
+          if (cleanContext.startsWith(cleanOrigin)) {
+              const userProgress = cleanContext.slice(cleanOrigin.length);
+              
+              if (cleanGhost.startsWith(userProgress)) {
+                  const remainingGhost = activeCache.fullGhostText.slice(userProgress.length);
+                  
+                  // Restore it (unless completely consumed)
+                  if (remainingGhost.length > 0) {
+                      ghost.show(remainingGhost);
+                      return;
+                  }
+              }
+          }
     }
 
     // 3. CACHE MISS -> FETCH NEW
@@ -480,6 +480,14 @@ require(["vs/editor/editor.main"], function () {
   });
 
   editor.addCommand(monaco.KeyCode.Escape, function () {
+    // UPDATED: Check for help modal first
+    const modal = document.getElementById("help-modal");
+    if (modal && modal.style.display === "block") {
+        modal.style.display = "none";
+        return;
+    }
+
+    // Original Ghost Logic
     if (window.ghostEnabled && ghost.anchorPosition) {
       ghost.hide();
       window.ghostEnabled = false;
@@ -495,4 +503,81 @@ require(["vs/editor/editor.main"], function () {
   editor.onDidScrollChange(() => {
     if (window.ghostEnabled) ghost.updatePosition();
   });
+
+  // --- 8. HELP FEATURE (Ctrl+Shift+H) ---
+  
+  // Create Help Modal Element (Dynamically Added)
+  const helpModal = document.createElement('div');
+  helpModal.id = "help-modal";
+  helpModal.style.position = "fixed";
+  helpModal.style.top = "50%";
+  helpModal.style.left = "50%";
+  helpModal.style.transform = "translate(-50%, -50%)";
+  helpModal.style.width = "500px";
+  helpModal.style.backgroundColor = "#1e1e1e";
+  helpModal.style.border = "1px solid #444";
+  helpModal.style.borderRadius = "8px";
+  helpModal.style.boxShadow = "0 8px 32px rgba(0,0,0,0.5)";
+  helpModal.style.color = "#d4d4d4";
+  helpModal.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+  helpModal.style.zIndex = "9999";
+  helpModal.style.padding = "20px";
+  helpModal.style.display = "none";
+
+  const helpTitle = document.createElement("h2");
+  helpTitle.innerText = "Keyboard Shortcuts";
+  helpTitle.style.marginTop = "0";
+  helpTitle.style.marginBottom = "20px";
+  helpTitle.style.fontSize = "18px";
+  helpTitle.style.borderBottom = "1px solid #333";
+  helpTitle.style.paddingBottom = "10px";
+  helpModal.appendChild(helpTitle);
+
+  const hotkeys = [
+      { keys: "Ctrl + Space", desc: "Trigger / Toggle Suggestion" },
+      { keys: "Ctrl + Down Arrow", desc: "Fetch Next Logic Step" },
+      { keys: "Tab", desc: "Accept Suggestion" },
+      { keys: "Esc", desc: "Dismiss Suggestion / Close Help" },
+      { keys: "Shift + H", desc: "Toggle This Help Menu" }
+  ];
+
+  const table = document.createElement("table");
+  table.style.width = "100%";
+  table.style.borderCollapse = "collapse";
+
+  hotkeys.forEach(hk => {
+      const row = document.createElement("tr");
+      
+      const keyCell = document.createElement("td");
+      keyCell.style.padding = "8px 0";
+      keyCell.style.fontWeight = "bold";
+      keyCell.style.color = "#ff5e00";
+      keyCell.innerText = hk.keys;
+      
+      const descCell = document.createElement("td");
+      descCell.style.padding = "8px 0";
+      descCell.style.textAlign = "right";
+      descCell.style.color = "#cccccc";
+      descCell.innerText = hk.desc;
+
+      row.appendChild(keyCell);
+      row.appendChild(descCell);
+      table.appendChild(row);
+  });
+  
+  helpModal.appendChild(table);
+  document.body.appendChild(helpModal);
+
+  // Toggle Function
+  function toggleHelp() {
+      if (helpModal.style.display === "none") {
+          helpModal.style.display = "block";
+      } else {
+          helpModal.style.display = "none";
+      }
+  }
+
+  // Register Keybinding for Help
+  editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.KeyH, toggleHelp);
+
 });
