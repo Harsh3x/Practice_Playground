@@ -12,20 +12,59 @@ require(["vs/editor/editor.main"], function () {
       value: "",
       language: "python",
       theme: "vs-dark",
-      fontSize: 20,
-      lineHeight: 24,
+      fontSize: 25, // Slightly larger for better readability
+      lineHeight: 26,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
-      padding: { top: 16 },
+      padding: { top: 20, bottom: 20 }, // More breathing room
       automaticLayout: true,
       autoClosingBrackets: "never",
       autoClosingQuotes: "never",
-      autoSurround: "never"
+      autoSurround: "never",
+      // Use a clean monospace font stack
+      fontFamily: "'Roboto Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+      fontLigatures: true,
+      cursorBlinking: "phase", // Smoother cursor blinking
+      cursorSmoothCaretAnimation: "on",
+      smoothScrolling: true
     }
   );
 
   const model = editor.getModel();
   const tabSize = editor.getOption(monaco.editor.EditorOption.tabSize) || 4;
+
+  // --- QUESTION STREAMING LOGIC ---
+  const QUESTION_TEXT = "Implement a Neural Network in python from scratch.";
+  
+  function streamQuestion() {
+      const display = document.getElementById("question-display");
+      let i = 0;
+      const speed = 30; // Slightly slower for a more deliberate data stream feel
+
+      function type() {
+          if (i < QUESTION_TEXT.length) {
+              display.textContent += QUESTION_TEXT.charAt(i);
+              i++;
+              
+              let cursor = document.getElementById("cursor-caret");
+              if(!cursor) {
+                  cursor = document.createElement("span");
+                  cursor.id = "cursor-caret";
+                  cursor.className = "cursor";
+                  display.appendChild(cursor);
+              } else {
+                  display.appendChild(cursor);
+              }
+              
+              setTimeout(type, speed);
+          }
+      }
+      // Small delay before starting the stream for dramatic effect
+      setTimeout(type, 500);
+  }
+
+  streamQuestion();
+  // -------------------------------
 
   class InlineGhost {
     constructor(editor) {
@@ -165,33 +204,42 @@ require(["vs/editor/editor.main"], function () {
 
         const visibleText = i === this.lineIndex ? fullLineText.slice(this.colConsumed) : fullLineText;
 
+        // --- UPDATED COLORS FOR DARK MODE (MORE VIBRANT) ---
         if (this.isMismatch) {
-            node.style.color = "#ef1818"; 
+            node.style.color = "#ff3333"; // Neon Red
             node.style.textDecoration = "line-through";
-            node.style.opacity = "0.8";
+            node.style.opacity = "0.9";
+             // Subtle red glow
+             node.style.textShadow = "0 0 5px rgba(255, 51, 51, 0.5)";
             node.textContent = visibleText;
         } else {
             node.style.textDecoration = "none";
             node.style.opacity = "1.0";
+             // Reset glow for normal text
+             node.style.textShadow = "none";
             const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
             if (isFullComment) {
-                node.style.color = "#ff9c50"; 
+                node.style.color = "#4ec9b0"; // VScode style green/teal
                 node.textContent = visibleText;
             } else {
                 const commentStartIndex = codeOnly.length;
                 const relativeSplitIndex = commentStartIndex - (i === this.lineIndex ? this.colConsumed : 0);
 
                 if (relativeSplitIndex >= visibleText.length) {
-                    node.style.color = "#ff9c50"; 
+                     node.style.color = "#4ec9b0";
                     node.textContent = visibleText;
                 } else if (relativeSplitIndex <= 0) {
-                    node.style.color = "#4FC1FF"; 
+                    // Suggested Code Color: Luminous Orange
+                    node.style.color = "#ff9e45"; 
+                    // Add back the glow for suggested code
+                    node.style.textShadow = "0 0 8px rgba(255, 158, 69, 0.6)";
                     node.textContent = visibleText;
                 } else {
                     const partCode = visibleText.slice(0, relativeSplitIndex);
                     const partComment = visibleText.slice(relativeSplitIndex);
-                    node.innerHTML = `<span style="color: #ff9c50">${esc(partCode)}</span><span style="color: #4FC1FF">${esc(partComment)}</span>`;
+                    // Code: Glowing Orange, Comment: Teal
+                    node.innerHTML = `<span style="color: #ff9e45; text-shadow: 0 0 8px rgba(255, 158, 69, 0.6);">${esc(partCode)}</span><span style="color: #4ec9b0">${esc(partComment)}</span>`;
                 }
             }
         }
@@ -255,7 +303,6 @@ require(["vs/editor/editor.main"], function () {
     
     const preLines = lines.slice(0, limitLineIndex);
     const currentLine = lines[limitLineIndex];
-    // Slice exactly at cursor column (column is 1-based)
     const preCurrentLine = currentLine.slice(0, cursor.column - 1);
     
     preLines.push(preCurrentLine);
@@ -263,9 +310,8 @@ require(["vs/editor/editor.main"], function () {
   }
 
   async function fetchGhostText(currentCode, currentCursor, mode) {
-     const problem = document.getElementById("intent").value; 
+     const problem = document.getElementById("question-display").innerText; 
      
-     // 1. Get code ending EXACTLY at cursor
      const codeContext = sliceCodeUpToCursor(currentCode, currentCursor);
 
      try {
@@ -284,13 +330,10 @@ require(["vs/editor/editor.main"], function () {
 
         if (!rawGhost.trim()) return null;
 
-        // 2. SAFETY CHECK: Remove Overlap
-        // If the server returns code that repeats the end of our input, strip it.
         const contextLines = codeContext.split('\n');
         const lastInputLine = contextLines[contextLines.length - 1].trim();
 
         if (lastInputLine.length > 3 && rawGhost.trim().startsWith(lastInputLine)) {
-            // Locate where the repetition ends in the ghost text
             const cutIndex = rawGhost.indexOf(lastInputLine) + lastInputLine.length;
             rawGhost = rawGhost.slice(cutIndex).trimStart();
         }
@@ -324,7 +367,6 @@ require(["vs/editor/editor.main"], function () {
      if (nextPart) ghost.append("\n" + nextPart);
   }
 
-  // KEYBINDINGS
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => toggleGhost('chunk'));
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Space, () => toggleGhost('full'));
 

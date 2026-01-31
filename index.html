@@ -3,25 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <title>GhostCode</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;500;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
   <header>
-    <h1>GhostCode</h1>
+    <h1>Practice Playground</h1>
     <p>Think. Type. Compare.</p>
   </header>
 
-  <section class="problem-card">
-    <textarea
-      id="intent"
-      placeholder="Describe what you want to implement..."
-    ></textarea>
-  </section>
+  <main class="app-container">
+    <div class="badge-container">
+      <img src="final.png" alt="Final Round AI" class="final-round-badge" />
+    </div>
 
-  <section class="editor-wrapper">
-    <div id="editor"></div>
-  </section>
+    <section class="problem-card tech-panel">
+      <div id="question-display"></div>
+    </section>
+
+    <section class="editor-wrapper tech-panel">
+      <div id="editor"></div>
+    </section>
+  </main>
 
   <script src="https://unpkg.com/monaco-editor@0.45.0/min/vs/loader.js"></script>
   <script src="main.js"></script>
