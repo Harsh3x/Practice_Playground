@@ -67,8 +67,6 @@ require(["vs/editor/editor.main"], function () {
   streamQuestion();
 
   // --- 3. CACHE STORE ---
-  // originCode: The editor content exactly when the ghost text was generated.
-  // fullGhostText: The generated ghost text (including instructions).
   let activeCache = {
       originCode: null,   
       fullGhostText: null 
@@ -141,7 +139,8 @@ require(["vs/editor/editor.main"], function () {
     }
 
     show(text) {
-      this.hide(false);
+      this.hide(false); 
+      
       this.lines = text.replace(/\r/g, "").split("\n");
       this.lineIndex = 0;
       this.colConsumed = 0;
@@ -154,6 +153,8 @@ require(["vs/editor/editor.main"], function () {
       this.editor.focus();
       this.lines.forEach(() => this.nodes.push(this.createNode()));
       this.updatePosition();
+      
+      window.ghostEnabled = true;
     }
 
     hide(restoreCaret = true) {
@@ -166,7 +167,7 @@ require(["vs/editor/editor.main"], function () {
       this.anchorPosition = null;
       this.lockedPosition = null;
       this.indentText = "";
-      if (window.ghostEnabled) window.ghostEnabled = false;
+      window.ghostEnabled = false;
     }
 
     accept() {
@@ -178,7 +179,7 @@ require(["vs/editor/editor.main"], function () {
 
       if (textToInsert) {
         this.editor.trigger('keyboard', 'type', { text: textToInsert });
-        // IMPORTANT: Clear cache on full accept because we used it up
+        // Clear cache strictly on accept
         activeCache = { originCode: null, fullGhostText: null };
       }
       this.hide();
@@ -224,6 +225,7 @@ require(["vs/editor/editor.main"], function () {
         const visibleText = i === this.lineIndex ? fullLineText.slice(this.colConsumed) : fullLineText;
         const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+        // --- RENDERING ---
         if (this.isMismatch) {
             node.style.color = "#ff3333"; 
             node.style.textDecoration = "line-through";
@@ -374,85 +376,62 @@ require(["vs/editor/editor.main"], function () {
 
   // --- 6. CORE ACTIONS ---
 
-  // ACTION 1: TRIGGER / GENERATE (Ctrl + Space)
+  // ACTION 1: TRIGGER / TOGGLE / RESTORE (Ctrl + Space)
   async function generateSingleBlock() {
-    if (window.ghostEnabled) return; 
+    
+    // 1. TOGGLE OFF
+    if (window.ghostEnabled) {
+      ghost.hide(true);
+      return;
+    }
 
     const currentPos = editor.getPosition();
     const fullCurrentCode = editor.getValue();
-    const codeContext = sliceCodeUpToCursor(fullCurrentCode, currentPos);
+    const currentContext = sliceCodeUpToCursor(fullCurrentCode, currentPos);
 
-    // Cache Check
+    // 2. CHECK CACHE FOR RESTORE
     if (activeCache.originCode && activeCache.fullGhostText) {
-         if (codeContext.startsWith(activeCache.originCode)) {
-             const userProgress = codeContext.slice(activeCache.originCode.length);
-             const normProgress = userProgress.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-             const normGhost = activeCache.fullGhostText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+         
+         const normalize = (s) => s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+         
+         const cleanContext = normalize(currentContext);
+         const cleanOrigin = normalize(activeCache.originCode);
+         const cleanGhost = normalize(activeCache.fullGhostText);
+         
+         // A. EXACT MATCH (User hid it, typed nothing, wants it back)
+         if (cleanContext === cleanOrigin) {
+             ghost.show(activeCache.fullGhostText);
+             return;
+         }
 
-             if (normGhost.startsWith(normProgress)) {
+         // B. PROGRESS MATCH (User typed ahead matching the ghost)
+         if (cleanContext.startsWith(cleanOrigin)) {
+             const userProgress = cleanContext.slice(cleanOrigin.length);
+             
+             if (cleanGhost.startsWith(userProgress)) {
                  const remainingGhost = activeCache.fullGhostText.slice(userProgress.length);
+                 
+                 // Restore it (unless completely consumed)
                  if (remainingGhost.length > 0) {
-                     console.log("⚡ Cache Hit: Generating from cache");
                      ghost.show(remainingGhost);
-                     window.ghostEnabled = true;
                      return;
                  }
              }
          }
     }
 
-    // Cache Miss -> Fetch
-    // NOTE: We do NOT clear activeCache here immediately. 
-    // We only overwrite it if the fetch succeeds.
+    // 3. CACHE MISS -> FETCH NEW
+    activeCache = { originCode: null, fullGhostText: null }; 
+
     const text = await fetchGhostText(editor.getValue(), editor.getPosition(), 'chunk');
     
     if (text) {
-       console.log("⚡ API Fetch Success. Updating Cache.");
-       activeCache = { originCode: codeContext, fullGhostText: text };
+       activeCache = { originCode: currentContext, fullGhostText: text };
        ghost.show(text);
-       window.ghostEnabled = true;
     }
   }
 
-  // ACTION 2: TOGGLE VISIBILITY (Ctrl + Shift + X)
-  async function toggleGhostVisibility() {
-    if (window.ghostEnabled) {
-      // HIDE
-      ghost.hide(true);
-      window.ghostEnabled = false;
-    } else {
-      // SHOW (CACHE STRATEGY)
-      const currentPos = editor.getPosition();
-      const fullCurrentCode = editor.getValue();
-      const codeContext = sliceCodeUpToCursor(fullCurrentCode, currentPos);
-
-      // 1. Try Cache First
-      if (activeCache.originCode && activeCache.fullGhostText) {
-         const cleanContext = codeContext.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-         const cleanOrigin = activeCache.originCode.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-
-         if (cleanContext.startsWith(cleanOrigin)) {
-             const userProgress = cleanContext.slice(cleanOrigin.length);
-             const cleanGhost = activeCache.fullGhostText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-
-             if (cleanGhost.startsWith(userProgress)) {
-                 const remainingGhost = activeCache.fullGhostText.slice(userProgress.length);
-                 
-                 // Show whatever is remaining
-                 ghost.show(remainingGhost);
-                 window.ghostEnabled = true;
-                 return;
-             }
-         }
-      } 
-      
-      // 2. Fallback: If cache fails, trigger generation (act like Ctrl+Space)
-      console.log("⚠️ Toggle: Cache miss/mismatch. Falling back to Generation.");
-      await generateSingleBlock();
-    }
-  }
-
-  // ACTION 3: NEXT STEP (Ctrl + DownArrow)
+  // ACTION 2: NEXT STEP (Ctrl + DownArrow)
   async function triggerNextStep() {
     const currentGhostLines = window.ghostEnabled ? [...ghost.lines] : [];
     
@@ -478,23 +457,18 @@ require(["vs/editor/editor.main"], function () {
             finalGhostText = newStepText;
         }
 
-        // UPDATE CACHE:
-        // We must update 'activeCache' with the NEW full text so toggling works
+        // Update Cache
         const currentPos = editor.getPosition();
         const currentContext = sliceCodeUpToCursor(editor.getValue(), currentPos);
-        
-        console.log("⚡ Extended. Updating Cache.");
         activeCache = { originCode: currentContext, fullGhostText: finalGhostText };
 
         ghost.show(finalGhostText);
-        window.ghostEnabled = true;
     }
   }
 
   // --- 7. KEYBINDINGS ---
 
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, generateSingleBlock);
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX, toggleGhostVisibility);
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.DownArrow, triggerNextStep);
 
   editor.addCommand(monaco.KeyCode.Tab, function () {
